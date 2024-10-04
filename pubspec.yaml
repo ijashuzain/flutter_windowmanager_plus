@@ -1,6 +1,6 @@
 name: flutter_windowmanager_plus
 description: "A Flutter plugin for manipulating Android WindowManager LayoutParams"
-version: 1.0.0
+version: 1.0.0+1
 repository: https://github.com/ijashuzain/flutter_windowmanager_plus
 
 
