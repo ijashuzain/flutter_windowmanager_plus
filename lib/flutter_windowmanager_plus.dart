@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
@@ -108,15 +109,23 @@ class FlutterWindowManagerPlus {
 
   /// Adds flags [flags] to the WindowManager.LayoutParams
   static Future<bool> addFlags(int flags) async {
-    return await _channel.invokeMethod("addFlags", {
-      "flags": flags,
-    });
+    if (Platform.isAndroid) {
+      return await _channel.invokeMethod("addFlags", {
+        "flags": flags,
+      });
+    } else {
+      return false;
+    }
   }
 
   /// Clears flags [flags] from the WindowManager.LayoutParams
   static Future<bool> clearFlags(int flags) async {
-    return await _channel.invokeMethod("clearFlags", {
-      "flags": flags,
-    });
+    if (Platform.isAndroid) {
+      return await _channel.invokeMethod("clearFlags", {
+        "flags": flags,
+      });
+    } else {
+      return false;
+    }
   }
 }
