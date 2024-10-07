@@ -1,3 +1,4 @@
+![Pub](https://img.shields.io/pub/v/flutter_windowmanager_plus.svg)
 # flutter_windowmanager_plus
 
 A Flutter plugin for dynamic control of Android window modes, succeeding the original flutter_windowmanager package.
