@@ -18,6 +18,17 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
   private MethodChannel channel;
   private Activity activity;
 
+  /**
+   * Flags requested by Dart that are currently meant to be set on the Activity window.
+   *
+   * <p>Android drops every WindowManager.LayoutParams flag when the Activity is recreated (screen
+   * rotation, multi-window resize, locale change, "don't keep activities", ...). The new Activity
+   * gets a brand new Window, so flags applied to the previous one — most importantly FLAG_SECURE —
+   * are silently lost. Tracking them here lets us re-apply them as soon as we are handed the new
+   * Activity.
+   */
+  private int appliedFlags = 0;
+
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
     channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "flutter_windowmanager_plus");
@@ -52,30 +63,26 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
       case WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER:
       case WindowManager.LayoutParams.FLAG_SPLIT_TOUCH:
       case WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH:
-        return true;
+      // The flags below are deprecated on current API levels, but Window#addFlags still accepts
+      // them — they become a no-op rather than an error, so we must not reject them.
       case WindowManager.LayoutParams.FLAG_BLUR_BEHIND:
-        return !(Build.VERSION.SDK_INT >= 15);
       case WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD:
-        return (Build.VERSION.SDK_INT >= 5 && Build.VERSION.SDK_INT < 26);
       case WindowManager.LayoutParams.FLAG_DITHER:
-        return !(Build.VERSION.SDK_INT >= 17);
+      case WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED:
+      case WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING:
+      case WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON:
+        return true;
+      // The flags below genuinely do not exist below the given API level.
+      case WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN:
+        return (Build.VERSION.SDK_INT >= 18);
+      case WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE:
+      case WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION:
+      case WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS:
+        return (Build.VERSION.SDK_INT >= 19);
       case WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS:
         return (Build.VERSION.SDK_INT >= 21);
       case WindowManager.LayoutParams.FLAG_LAYOUT_ATTACHED_IN_DECOR:
         return (Build.VERSION.SDK_INT >= 22);
-      case WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN:
-        return (Build.VERSION.SDK_INT >= 18);
-      case WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE:
-        return (Build.VERSION.SDK_INT >= 19);
-      case WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED:
-        return !(Build.VERSION.SDK_INT >= 27);
-      case WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING:
-        return !(Build.VERSION.SDK_INT >= 20);
-      case WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION:
-      case WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS:
-        return (Build.VERSION.SDK_INT >= 19);
-      case WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON:
-        return !(Build.VERSION.SDK_INT >= 27);
       default:
         return false;
     }
@@ -84,7 +91,9 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
   private boolean validLayoutParams(Result result, int flags) {
     for (int i = 0; i < Integer.SIZE; i++) {
       int flag = (1 << i);
-      if ((flags & flag) == 1) {
+      // Compare against 0, not 1: `flags & flag` yields the flag's own value, so `== 1` was only
+      // ever true for bit 0 and every other flag skipped validation entirely.
+      if ((flags & flag) != 0) {
         if (!validLayoutParam(flag)) {
           result.error("FlutterWindowManagerPlusPlugin","FlutterWindowManagerPlusPlugin: invalid flag specification: " + Integer.toHexString(flag), null);
           return false;
@@ -95,6 +104,30 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
     return true;
   }
 
+  /** Applies {@code flags} to the current Activity window and records them for re-application. */
+  private void addWindowFlags(int flags) {
+    appliedFlags |= flags;
+    activity.getWindow().addFlags(flags);
+  }
+
+  /** Clears {@code flags} from the current Activity window and stops tracking them. */
+  private void clearWindowFlags(int flags) {
+    appliedFlags &= ~flags;
+    activity.getWindow().clearFlags(flags);
+  }
+
+  /**
+   * Re-applies the tracked flags to the Activity we have just been (re)attached to.
+   *
+   * <p>Without this, a configuration change silently drops FLAG_SECURE and the app becomes
+   * screenshot-able again without the Dart side ever being told.
+   */
+  private void reapplyFlags() {
+    if (activity != null && appliedFlags != 0) {
+      activity.getWindow().addFlags(appliedFlags);
+    }
+  }
+
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
     if (activity == null) {
@@ -102,38 +135,42 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
       return;
     }
 
-    final Integer flags = call.argument("flags");
-    if (flags == null) {
-      result.error("INVALID_ARGUMENT", "Flags argument is missing", null);
-      return;
-    }
-
-    if (!validLayoutParams(result, flags)) {
-      return;
-    }
-
     switch (call.method) {
       case "addFlags":
-        activity.getWindow().addFlags(flags);
+      case "clearFlags": {
+        final Integer flags = call.argument("flags");
+        if (flags == null) {
+          result.error("INVALID_ARGUMENT", "Flags argument is missing", null);
+          return;
+        }
+
+        if (!validLayoutParams(result, flags)) {
+          return;
+        }
+
+        if (call.method.equals("addFlags")) {
+          addWindowFlags(flags);
+        } else {
+          clearWindowFlags(flags);
+        }
         result.success(true);
         break;
-      case "clearFlags":
-        activity.getWindow().clearFlags(flags);
-        result.success(true);
-        break;
-      case "setSecure":
-        Boolean setSecure = call.argument("setSecure");
+      }
+      case "setSecure": {
+        final Boolean setSecure = call.argument("setSecure");
         if (setSecure == null) {
           result.error("INVALID_ARGUMENT", "setSecure argument is missing", null);
           return;
         }
+
         if (setSecure) {
-          activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+          addWindowFlags(WindowManager.LayoutParams.FLAG_SECURE);
         } else {
-          activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+          clearWindowFlags(WindowManager.LayoutParams.FLAG_SECURE);
         }
         result.success(true);
         break;
+      }
       default:
         result.notImplemented();
     }
@@ -142,6 +179,7 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding activityPluginBinding) {
     activity = activityPluginBinding.getActivity();
+    reapplyFlags();
   }
 
   @Override
@@ -152,6 +190,7 @@ public class FlutterWindowManagerPlugin implements FlutterPlugin, MethodCallHand
   @Override
   public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding activityPluginBinding) {
     activity = activityPluginBinding.getActivity();
+    reapplyFlags();
   }
 
   @Override

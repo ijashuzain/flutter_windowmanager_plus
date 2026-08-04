@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// A base class for manipulating Android WindowManager.LayoutParams.
@@ -105,27 +105,45 @@ class FlutterWindowManagerPlus {
   static const int FLAG_TURN_SCREEN_ON = 0x00200000;
 
   static const MethodChannel _channel =
-      const MethodChannel('flutter_windowmanager_plus');
+      MethodChannel('flutter_windowmanager_plus');
+
+  /// Whether the current platform supports WindowManager.LayoutParams.
+  ///
+  /// Uses [defaultTargetPlatform] rather than `Platform.isAndroid` so that
+  /// tests can override the reported platform via
+  /// `debugDefaultTargetPlatformOverride` and still exercise the method
+  /// channel.
+  static bool get _isSupported =>
+      defaultTargetPlatform == TargetPlatform.android;
 
   /// Adds flags [flags] to the WindowManager.LayoutParams
   static Future<bool> addFlags(int flags) async {
-    if (Platform.isAndroid) {
-      return await _channel.invokeMethod("addFlags", {
-        "flags": flags,
-      });
-    } else {
-      return false;
-    }
+    if (!_isSupported) return false;
+    return await _channel.invokeMethod<bool>("addFlags", {
+          "flags": flags,
+        }) ??
+        false;
   }
 
   /// Clears flags [flags] from the WindowManager.LayoutParams
   static Future<bool> clearFlags(int flags) async {
-    if (Platform.isAndroid) {
-      return await _channel.invokeMethod("clearFlags", {
-        "flags": flags,
-      });
-    } else {
-      return false;
-    }
+    if (!_isSupported) return false;
+    return await _channel.invokeMethod<bool>("clearFlags", {
+          "flags": flags,
+        }) ??
+        false;
+  }
+
+  /// Adds or clears [FLAG_SECURE] depending on [secure].
+  ///
+  /// The flag is re-applied automatically if the Android Activity is
+  /// recreated (for example on rotation or a multi-window change), which a
+  /// plain [addFlags] call cannot survive.
+  static Future<bool> setSecure(bool secure) async {
+    if (!_isSupported) return false;
+    return await _channel.invokeMethod<bool>("setSecure", {
+          "setSecure": secure,
+        }) ??
+        false;
   }
 }

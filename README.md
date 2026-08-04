@@ -21,6 +21,34 @@ This can further be toggled for a specific screen by either using a [RouteAware]
 
 [RouteAware]: https://api.flutter.dev/flutter/widgets/RouteAware-class.html
 
+## Blocking screenshots
+
+Because toggling `FLAG_SECURE` is by far the most common use of this plugin, there is a dedicated helper:
+
+```dart
+@override
+void initState() {
+  super.initState();
+  FlutterWindowManagerPlus.setSecure(true);
+}
+
+@override
+void dispose() {
+  FlutterWindowManagerPlus.setSecure(false);
+  super.dispose();
+}
+```
+
+`setSecure(true)` is equivalent to `addFlags(FLAG_SECURE)`, and `setSecure(false)` to `clearFlags(FLAG_SECURE)`.
+
+### Flags survive Activity recreation
+
+Android discards every `WindowManager.LayoutParams` flag when it recreates the Activity — on rotation, a multi-window resize, a locale change, or with *Developer options → Don't keep activities* enabled. The recreated Activity receives a brand new `Window`, so a previously applied `FLAG_SECURE` is silently lost and the screen becomes capturable again.
+
+Since 1.1.0 the plugin tracks the flags you asked for and re-applies them as soon as it is attached to the new Activity, so you do not have to re-issue the call yourself. Flags you remove with `clearFlags` / `setSecure(false)` stop being tracked.
+
+> **Note:** `FLAG_SECURE` is enforced by the OS compositor. It blocks the system screenshot, screen recording, and the recents/app-switcher preview — but it cannot stop a photo of the screen taken with another device, and it has no effect on rooted devices or emulators where the compositor can be bypassed.
+
 ## Flags
 
 The full range of [LayoutParams] flags are passed through. The plugin will carry out basic API level checking and throw an error on any unsupported flag specification. Flags are implemented using a bitmask, and may be specified individually or ORed together for setting/clearing multiple flags at once.
@@ -57,7 +85,7 @@ FLAG_LOCAL_FOCUS_MODE
 FLAG_SHOW_WHEN_LOCKED
 FLAG_TOUCHABLE_WHEN_WAKING
 FLAG_TRANSLUCENT_NAVIGATION
-FLAG_TRANSLUCANT_STATUS
+FLAG_TRANSLUCENT_STATUS
 FLAG_TURN_SCREEN_ON
 ```
 

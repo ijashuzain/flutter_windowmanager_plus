@@ -1,4 +1,11 @@
 include: package:flutter_lints/flutter.yaml
 
+linter:
+  rules:
+    # The public FLAG_* constants intentionally mirror the SCREAMING_CASE names
+    # of android.view.WindowManager.LayoutParams. Renaming them to lowerCamelCase
+    # would be a breaking change for every consumer for no practical gain.
+    constant_identifier_names: false
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
