@@ -36,7 +36,7 @@
 
 ### Changed
 - Specified the `namespace` in the module's `build.gradle` for AGP 8 compatibility.
-- Removed all iOS-related files, as the plugin is Android-only.
+- Guarded the platform channel calls behind an Android platform check.
 
 ## [1.0.0]
 
