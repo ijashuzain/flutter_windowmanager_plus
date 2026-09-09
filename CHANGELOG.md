@@ -1,3 +1,12 @@
+## [Unreleased]
+
+### Fixed
+- Removed the unused Kotlin Gradle Plugin from the Java-only Android module,
+  eliminating the Flutter 3.47+ Built-in Kotlin migration warning and supporting
+  AGP 9 consumers ([#9]).
+
+[#9]: https://github.com/ijashuzain/flutter_windowmanager_plus/issues/9
+
 ## [1.1.0]
 
 ### Added
