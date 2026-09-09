@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.1.1]
 
 ### Fixed
 - Removed the unused Kotlin Gradle Plugin from the Java-only Android module,
